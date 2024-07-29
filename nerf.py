@@ -1,24 +1,23 @@
-from typing import Tuple, Self, Optional, List
+from typing import Tuple, Self, Optional, List, Dict
 
 from dataclasses import dataclass
 from functools import partial
 
-from config import Config
+#from config import Config
 
 import jax_primitives as jp
+from jax_primitives import Dynamic, modelclass
 
 import jax.numpy as jnp
 import jax
 
 
-@jp.modelclass
+@modelclass
 class MLP:
 
-    main_layers: jp.Dynamic[List[jp.Linear]]
-    sigma_layer: jp.Dynamic[jp.Linear]
-    color_backbone: jp.Dynamic[List[jp.Linear]]
-    color_bias: jp.Dynamic[jax.Array]
-    color_final_layer: jp.Dynamic[jp.Linear]
+    main_layers: Dynamic[List[jp.Linear]]
+    sigma_layer: Dynamic[jp.Linear]
+    color_layers: Dynamic[Dict[str, jp.Linear | jax.Array]]
     conditioned_layers: Tuple[int, ...]
 
     @classmethod
@@ -46,14 +45,14 @@ class MLP:
 
         keys = jax.random.split(key, 3)
 
-        color_backbone = [
-            jp.Linear.create(inner_dim, inner_dim // 2, keys[0]),
-            jp.Linear.create(d_dim, inner_dim // 2, keys[1])
-        ]
-        color_bias = jnp.zeros(inner_dim // 2)
-        color_final_layer = jp.Linear.create(inner_dim // 2, 3, keys[2])
+        color_layers = {
+            'backbone': jp.Linear.create(inner_dim, inner_dim // 2, keys[0]),
+            'direction': jp.Linear.create(d_dim, inner_dim // 2, keys[1]),
+            'bias': jnp.zeros(inner_dim // 2),
+            'final': jp.Linear.create(inner_dim // 2, 3, keys[2])
+        }
 
-        return cls(main_layers, sigma_layer, color_backbone, color_bias, color_final_layer, conditioned_layers)
+        return cls(main_layers, sigma_layer, color_layers, conditioned_layers)
 
     @partial(jax.jit, static_argnames='train')
     def __call__(
@@ -83,9 +82,9 @@ class MLP:
         sigma = jax.nn.relu(sigma)
         sigma = sigma.squeeze(-1)
 
-        color = self.color_backbone[0](y) + self.color_backbone[1](d) + self.color_bias
+        color = self.color_layers['backbone'](y) + self.color_layers['direction'](d) + self.color_layers['bias']
         color = jax.nn.relu(color)
-        color = self.color_final_layer(color)
+        color = self.color_layers['final'](color)
         color = jax.nn.sigmoid(color)
 
         return sigma, color
@@ -106,11 +105,11 @@ def sinusoidal_emb(x, d):
     return y
 
 
-@jp.modelclass
+@modelclass
 class NeRF:
 
-    net_coarse: jp.Dynamic[MLP]
-    net_fine: jp.Dynamic[MLP]
+    net_coarse: Dynamic[MLP]
+    net_fine: Dynamic[MLP]
     sampling_depth: float
     n_coarse_samples: int
     n_fine_samples: int

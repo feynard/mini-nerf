@@ -14,7 +14,7 @@ class Camera:
     res_y: int
 
 
-def render(nerf, camera, return_coarse: bool = False, batch_size: int = 8192):
+def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
 
     '''
     Train:
