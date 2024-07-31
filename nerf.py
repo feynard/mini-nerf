@@ -1,6 +1,5 @@
 from typing import Tuple, Self, Optional, List, Dict
 
-from dataclasses import dataclass
 from functools import partial
 
 #from config import Config
@@ -20,6 +19,7 @@ class MLP:
     color_layers: Dynamic[Dict[str, jp.Linear | jax.Array]]
     conditioned_layers: Tuple[int, ...]
 
+
     @classmethod
     def create(
         cls,
@@ -36,7 +36,7 @@ class MLP:
         main_layers = [jp.Linear.create(x_dim, inner_dim, keys[0])]
 
         for i in range(1, n_layers + 1):
-            if i == 4:
+            if i in conditioned_layers:
                 main_layers.append(jp.Linear.create(inner_dim + x_dim, inner_dim, keys[i]))
             else:
                 main_layers.append(jp.Linear.create(inner_dim, inner_dim, keys[i]))
@@ -46,8 +46,8 @@ class MLP:
         keys = jax.random.split(key, 3)
 
         color_layers = {
-            'backbone': jp.Linear.create(inner_dim, inner_dim // 2, keys[0]),
-            'direction': jp.Linear.create(d_dim, inner_dim // 2, keys[1]),
+            'backbone': jp.Linear.create(inner_dim, inner_dim // 2, keys[0], bias=False),
+            'direction': jp.Linear.create(d_dim, inner_dim // 2, keys[1], bias=False),
             'bias': jnp.zeros(inner_dim // 2),
             'final': jp.Linear.create(inner_dim // 2, 3, keys[2])
         }
