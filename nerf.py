@@ -28,7 +28,9 @@ class MLP:
         d_dim: int,
         inner_dim: int,
         n_layers: int,
-        conditioned_layers: Tuple[int, ...]
+        conditioned_layers: Tuple[int, ...],
+        *args,
+        **kwargs
     ) -> Self:
 
         keys = jax.random.split(key, n_layers + 1)
@@ -129,6 +131,8 @@ class NeRF:
         sampling_depth: float = 1.0,
         n_coarse_samples: int = 64,
         n_fine_samples: int = 128,
+        *args,
+        **kwargs
     ) -> Self:
         
         key_coarse, key_fine = jax.random.split(key, 2)

@@ -1,7 +1,7 @@
 import itertools
 import pickle
 
-import bpy
+import bpy # type: ignore
 import numpy as np
 
 
@@ -39,7 +39,7 @@ def get_camera_params(camera_object: bpy.types.Object, render: bpy.types.RenderS
 n_phi = 16
 n_theta = 2
 
-elevation = -np.pi / 6, np.pi / 4
+elevation = np.pi / 12, np.pi / 4
 azimuthal = 0, np.pi * 2
 
 thetas = np.linspace(*elevation, n_theta)

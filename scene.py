@@ -1,4 +1,4 @@
-import os
+import pathlib
 import pickle
 from typing import Generator, Tuple
 
@@ -20,9 +20,12 @@ class Scene:
     def __init__(
         self,
         main_folder: str,
+        image_scale: float = 1.0
     ):
+        
+        main_folder = pathlib.Path(main_folder)
 
-        with open(os.path.join(main_folder, 'geometry.pkl'), 'rb') as f:
+        with open(main_folder / 'geometry.pkl', 'rb') as f:
             data = pickle.load(f)
 
         self.n_images = data['n']
@@ -43,15 +46,19 @@ class Scene:
 
         self.o, self.ul, self.ll, self.ur = (t @ r @ s @ cone.T).transpose(2, 0, 1) [:, :, :3]
 
-        images_folder = os.path.join(main_folder, 'images')
+        images_folder = main_folder / 'images'
         images = [
-            np.array(Image.open(os.path.join(images_folder, f'{i:04}.png')).convert('RGB'), dtype=np.float32) / 255
+            Image.open(images_folder / f'{i:04}.png').convert('RGB')
             for i in range(self.n_images)
         ]
 
-        self.images = np.stack(images)
+        if image_scale != 1.0:
+            for i, img in enumerate(images):
+                images[i] = img.resize((round(r * image_scale) for r in img.size))
 
-        self.res_x, self.res_y = data['res_x'], data['res_y']
+        self.images = np.stack([np.array(img, dtype=np.float32) / 255 for img in images])
+
+        self.res_y, self.res_x = self.images.shape[1: 3]
 
         self.u = (self.ur - self.ul) / self.res_x
         self.v = (self.ll - self.ul) / self.res_y
