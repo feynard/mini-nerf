@@ -1,0 +1,27 @@
+scene: data/nissan
+experiment_name: nissan
+logs_folder: logs
+log_every: 10_000
+image_scale: 1.0
+render_batch_size: 8192
+train_view_to_log: 14
+continue_training: 
+
+optimization:
+  lr: 5.0e-4
+  n_iterations: 300_000
+  n_rays: 4096
+  use_scheduler: true
+  lr_end: 5.0e-5
+
+nerf:
+  mlp:
+    x_pos_dim: 10
+    d_pos_dim: 4
+    inner_dim: 256
+    n_layers: 8
+    conditioned_layers: [4]
+  
+  sampling_depth: 1.5
+  n_coarse_samples: 64
+  n_fine_samples: 128

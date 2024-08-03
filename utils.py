@@ -1,5 +1,6 @@
-from dataclasses import dataclass
 import pickle
+from dataclasses import dataclass
+
 import numpy as np
 
 
@@ -37,19 +38,17 @@ def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
     directions = points - camera.origin
     directions = directions / np.linalg.norm(directions, axis=-1, keepdims=True)
 
-    color = [
+    color_batches = [
         nerf(points[i: i + batch_size], directions[i: i + batch_size], train=False, return_coarse=return_coarse)
         for i in range(0, camera.res_x * camera.res_y, batch_size)
     ]
 
-    color = np.concatenate(color).clip(0, 1)
-    
-    if not return_coarse:
-        return color.reshape(camera.res_y, camera.res_x, 3)
+    if return_coarse:
+        color_coarse = np.concatenate([c[0] for c in color_batches]).clip(0, 1).reshape(camera.res_y, camera.res_x, 3)
+        color_fine = np.concatenate([c[1] for c in color_batches]).clip(0, 1).reshape(camera.res_y, camera.res_x, 3)
+        return color_coarse, color_fine
     else:
-        color_coarse = color[0::2]
-        color_fine = color[1::2]
-        return color_coarse.reshape(camera.res_y, camera.res_x, 3), color_fine.reshape(camera.res_y, camera.res_x, 3)
+        return np.concatenate(color_batches).clip(0, 1).reshape(camera.res_y, camera.res_x, 3)
 
 
 def save(pytree, file):

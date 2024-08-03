@@ -1,14 +1,10 @@
-from typing import Tuple, Self, Optional, List, Dict
-
 from functools import partial
+from typing import Dict, List, Optional, Self, Tuple
 
-#from config import Config
-
+import jax
+import jax.numpy as jnp
 import jax_primitives as jp
 from jax_primitives import Dynamic, modelclass
-
-import jax.numpy as jnp
-import jax
 
 
 @modelclass
@@ -56,13 +52,13 @@ class MLP:
 
         return cls(main_layers, sigma_layer, color_layers, conditioned_layers)
 
-    @partial(jax.jit, static_argnames='train')
+    @partial(jax.jit, static_argnames='add_noise')
     def __call__(
         self,
         x: jax.Array,
         d: jax.Array,
-        sigma_noise_key: Optional[jax.Array] = None,
-        train: bool = True
+        add_noise: bool = True,
+        sigma_noise_key: Optional[jax.Array] = None
     ) -> Tuple[jax.Array, jax.Array]:
         
         y = x
@@ -78,7 +74,7 @@ class MLP:
 
         sigma = self.sigma_layer(y)
 
-        if train:
+        if add_noise:
             sigma = sigma + jax.random.normal(sigma_noise_key, sigma.shape)
 
         sigma = jax.nn.relu(sigma)
@@ -197,9 +193,9 @@ class NeRF:
 
         if train:
             key, coarse_net_key = jax.random.split(key, 2)
-            sigma_coarse, color_coarse = self.net_coarse(x, d, coarse_net_key)
+            sigma_coarse, color_coarse = self.net_coarse(x, d, add_noise=True, sigma_noise_key=coarse_net_key)
         else:
-            sigma_coarse, color_coarse = self.net_coarse(x, d, train=False)
+            sigma_coarse, color_coarse = self.net_coarse(x, d, add_noise=False)
 
         color_coarse, w = self.ray_march(color_coarse, sigma_coarse, samples_coarse)
 
@@ -226,9 +222,9 @@ class NeRF:
 
         if train:
             key, fine_net_key = jax.random.split(key, 2)
-            sigma_fine, color_fine = self.net_fine(x, d, fine_net_key)
+            sigma_fine, color_fine = self.net_fine(x, d, add_noise=True, sigma_noise_key=fine_net_key)
         else:
-            sigma_fine, color_fine = self.net_fine(x, d, train=False)
+            sigma_fine, color_fine = self.net_fine(x, d, add_noise=False)
 
         color_fine, _ = self.ray_march(color_fine, sigma_fine, samples_final)
 
