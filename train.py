@@ -29,16 +29,6 @@ if __name__ == '__main__':
     os.makedirs(checkpoints_folder, exist_ok=True)
     
     n_iterations = config.optimization.n_iterations
-
-    key = jp.RandomKey(0)
-    nerf = NeRF.create(key // 1, **config.nerf, **config.nerf.mlp)
-
-    if config.optimization.use_scheduler:
-        scheduler = jp.ExponentialAnnealing.create(n_iterations, config.optimization.lr, config.optimization.lr_end)
-    else:
-        scheduler = None
-
-    opt = jp.Adam.create(nerf, config.optimization.lr, scheduler=scheduler)
     
     def mse(nerf, points, directions, pixels, keys):
         color_coarse, color_fine = nerf(points, directions, keys)
@@ -51,8 +41,24 @@ if __name__ == '__main__':
         return opt, nerf, loss
     
     scene = Scene(config.scene, config.image_scale)
+    key = jp.RandomKey(0)
 
-    for i, (x, d, p) in enumerate(pbar := tqdm(scene.random_rays(n_iterations, config.optimization.n_rays))):
+    if config.starting_checkpoint is not None:
+        with open(config.starting_checkpoint, 'rb') as f:
+            opt, nerf = pickle.load(f)
+    else:
+        nerf = NeRF.create(key // 1, **config.nerf, **config.nerf.mlp)
+
+        if config.optimization.use_scheduler:
+            scheduler = jp.ExponentialAnnealing.create(n_iterations, config.optimization.lr, config.optimization.lr_end)
+        else:
+            scheduler = None
+
+        opt = jp.Adam.create(nerf, config.optimization.lr, scheduler=scheduler)
+
+    pbar = tqdm(scene.random_rays(n_iterations - opt.t, config.optimization.n_rays), initial=opt.t + 1)
+    
+    for i, (x, d, p) in zip(range(opt.t + 1, n_iterations), pbar):
 
         if (i + 1) % config.log_every == 0 or i == 0:
             
