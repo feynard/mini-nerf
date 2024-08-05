@@ -56,26 +56,30 @@ if __name__ == '__main__':
 
         opt = jp.Adam.create(nerf, config.optimization.lr, scheduler=scheduler)
 
-    pbar = tqdm(scene.random_rays(n_iterations - opt.t, config.optimization.n_rays), initial=opt.t + 1)
+    pbar = tqdm(scene.random_rays(n_iterations - opt.t, config.optimization.n_rays), initial=opt.t)
     
-    for i, (x, d, p) in zip(range(opt.t + 1, n_iterations), pbar):
+    def log(iteration):
+        cam, img = scene.get_camera_image_pair(config.train_view_to_log)
+        img_coarse, img_fine = render(nerf, cam, return_coarse=True, batch_size=config.render_batch_size)
 
-        if (i + 1) % config.log_every == 0 or i == 0:
-            
-            cam, img = scene.get_camera_image_pair(config.train_view_to_log)
-            img_coarse, img_fine = render(nerf, cam, return_coarse=True, batch_size=config.render_batch_size)
+        Image.fromarray((img_fine * 255).astype(dtype=np.uint8)).save(
+            images_train_folder / f'{iteration:06d}_fine.png'
+        )
 
-            Image.fromarray((img_fine * 255).astype(dtype=np.uint8)).save(
-                images_train_folder / f'{i if i == 0 else i + 1:06d}_fine.png'
-            )
+        Image.fromarray((img_coarse * 255).astype(dtype=np.uint8)).save(
+            images_train_folder / f'{iteration:06d}_coarse.png'
+        )
 
-            Image.fromarray((img_coarse * 255).astype(dtype=np.uint8)).save(
-                images_train_folder / f'{i if i == 0 else i + 1:06d}_coarse.png'
-            )
+        with open(checkpoints_folder / f'{iteration:06d}.ckpt', 'wb') as f:
+            pickle.dump((opt, nerf), f)
 
-            with open(checkpoints_folder / f'{i if i == 0 else i + 1:06d}.ckpt', 'wb') as f:
-                pickle.dump((opt, nerf), f)
+    for i, (x, d, p) in zip(range(opt.t, n_iterations), pbar):
+
+        if i % config.log_every == 0 or i == 0:
+            log(i)
 
         opt, nerf, loss = update(opt, nerf, x, d, p, key // config.optimization.n_rays)
         
         pbar.set_description(f"Loss: {loss.item():.6f}")
+
+    log(n_iterations)
