@@ -1,20 +1,23 @@
 import pickle
-from dataclasses import dataclass
+from functools import partial
 
-import numpy as np
+import jax
+import jax.numpy as jnp
+from jax_primitives import Dynamic, pytree
 
 
-@dataclass
+@pytree
 class Camera:
 
-    origin: np.ndarray
-    upper_left: np.ndarray
-    lower_left: np.ndarray
-    upper_right: np.ndarray
+    origin: Dynamic[jax.Array]
+    upper_left: Dynamic[jax.Array]
+    lower_left: Dynamic[jax.Array]
+    upper_right: Dynamic[jax.Array]
     res_x: int
     res_y: int
 
 
+@partial(jax.jit, static_argnames=('return_coarse', 'batch_size'))
 def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
 
     '''
@@ -27,28 +30,34 @@ def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
     img = render(nerf, cam)
     '''
 
-    points = np.linspace(
-        np.linspace(camera.upper_left, camera.upper_right, camera.res_x),
-        np.linspace(camera.lower_left, camera.lower_left + camera.upper_right - camera.upper_left, camera.res_x),
+    points = jnp.linspace(
+        jnp.linspace(camera.upper_left, camera.upper_right, camera.res_x),
+        jnp.linspace(camera.lower_left, camera.lower_left + camera.upper_right - camera.upper_left, camera.res_x),
         camera.res_y
     )
 
     points = points.reshape(-1, 3)
 
     directions = points - camera.origin
-    directions = directions / np.linalg.norm(directions, axis=-1, keepdims=True)
+    directions = directions / jnp.linalg.norm(directions, axis=-1, keepdims=True)
 
     color_batches = [
         nerf(points[i: i + batch_size], directions[i: i + batch_size], train=False, return_coarse=return_coarse)
         for i in range(0, camera.res_x * camera.res_y, batch_size)
     ]
 
+    image_shape = camera.res_y, camera.res_x, 3
+
     if return_coarse:
-        color_coarse = np.concatenate([c[0] for c in color_batches]).clip(0, 1).reshape(camera.res_y, camera.res_x, 3)
-        color_fine = np.concatenate([c[1] for c in color_batches]).clip(0, 1).reshape(camera.res_y, camera.res_x, 3)
-        return color_coarse, color_fine
+        color_coarse, color_fine = [
+            jnp.concatenate([c[i] for c in color_batches]).clip(0, 1).reshape(*image_shape)
+            for i in range(2)
+        ]
+
+        return [jnp.array(c * 255).astype(dtype=jnp.uint8) for c in [color_coarse, color_fine]]
     else:
-        return np.concatenate(color_batches).clip(0, 1).reshape(camera.res_y, camera.res_x, 3)
+        color_coarse = jnp.concatenate(color_batches).clip(0, 1).reshape(*image_shape)
+        return (color_coarse * 255).astype(jnp.uint8)
 
 
 def save(pytree, file):

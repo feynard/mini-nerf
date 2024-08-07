@@ -54,7 +54,7 @@ class Scene:
 
         if image_scale != 1.0:
             for i, img in enumerate(images):
-                images[i] = img.resize((round(r * image_scale) for r in img.size))
+                images[i] = img.resize(tuple(round(r * image_scale) for r in img.size))
 
         self.images = np.stack([np.array(img, dtype=np.float32) / 255 for img in images])
 
@@ -87,7 +87,7 @@ class Scene:
 
             yield points, directions, pixels
 
-    def get_camera_image_pair(self, i: int) -> Tuple[Camera, np.ndarray]:
+    def get_camera(self, i: int) -> Camera:
         cam = Camera(
             origin=self.o[i],
             upper_left=self.ul[i],
@@ -97,6 +97,7 @@ class Scene:
             res_y=self.res_y
         )
 
-        img = self.images[i]
-
-        return cam, img
+        return cam
+    
+    def get_image(self, i) -> np.ndarray:
+        return self.images[i]
