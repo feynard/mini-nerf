@@ -17,7 +17,6 @@ class Camera:
     res_y: int
 
 
-@partial(jax.jit, static_argnames=('return_coarse', 'batch_size'))
 def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
 
     '''
@@ -41,8 +40,10 @@ def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
     directions = points - camera.origin
     directions = directions / jnp.linalg.norm(directions, axis=-1, keepdims=True)
 
+    batch_render = jax.jit(partial(nerf.__call__, train=False, return_coarse=return_coarse))
+
     color_batches = [
-        nerf(points[i: i + batch_size], directions[i: i + batch_size], train=False, return_coarse=return_coarse)
+        batch_render(points[i: i + batch_size], directions[i: i + batch_size])
         for i in range(0, camera.res_x * camera.res_y, batch_size)
     ]
 
@@ -56,8 +57,8 @@ def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
 
         return [jnp.array(c * 255).astype(dtype=jnp.uint8) for c in [color_coarse, color_fine]]
     else:
-        color_coarse = jnp.concatenate(color_batches).clip(0, 1).reshape(*image_shape)
-        return (color_coarse * 255).astype(jnp.uint8)
+        color_fine = jnp.concatenate(color_batches).clip(0, 1).reshape(*image_shape)
+        return (color_fine * 255).astype(jnp.uint8)
 
 
 def save(pytree, file):

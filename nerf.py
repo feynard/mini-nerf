@@ -52,7 +52,7 @@ class MLP:
 
         return cls(main_layers, sigma_layer, color_layers, conditioned_layers)
 
-    @partial(jax.jit, static_argnames='add_noise')
+
     def __call__(
         self,
         x: jax.Array,
@@ -88,7 +88,6 @@ class MLP:
         return sigma, color
 
 
-@partial(jax.jit, static_argnames='d')
 def sinusoidal_emb(x, d):
     # TODO: try other implementations, e.g. from here 
     # https://stackoverflow.com/questions/5347065/interleaving-two-numpy-arrays-efficiently
@@ -150,7 +149,6 @@ class NeRF:
         return jnp.sum(color * jnp.expand_dims(w, -1), 0), w / (w.sum() + 1e-7)
 
 
-    @partial(jax.jit, static_argnames=('train', 'return_coarse'))
     def __call__(
         self,
         points: jax.Array,
