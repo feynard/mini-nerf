@@ -26,14 +26,12 @@ class Config(SimpleNamespace):
             
             if isinstance(v, Config):
                 
-                result += "\n" + k + ":" + "\n"
-                lines = str(v).split('\n')
+                result += k + ":" + "\n"
+                lines = repr(v).split('\n')
                 
-                for i, line in enumerate(lines):
+                for j, line in enumerate(lines):
                     result += " " * 2 + line
-                
-                    if i != len(lines) - 1:
-                        result += "\n"
+                    result += "\n"
             else:
                 result += k + ": " + str(v)
                 if i != len(self.__dict__) - 1:

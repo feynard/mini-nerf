@@ -1,5 +1,6 @@
 import os
 import pathlib
+import shutil
 import sys
 
 import jax
@@ -32,17 +33,23 @@ if __name__ == '__main__':
     os.makedirs(images_coarse_folder, exist_ok=True)
     os.makedirs(checkpoints_folder, exist_ok=True)
 
-    n_iterations = config.optimization.n_iterations
+    shutil.copyfile(sys.argv[1], logs_folder / 'config.yaml')
 
-    def mse(nerf, points, directions, pixels, keys):
+    def loss(nerf, points, directions, pixels, keys):
         color_coarse, color_fine = nerf(points, directions, keys)
-        return jnp.mean((color_coarse - pixels) ** 2) + jnp.mean((color_fine - pixels) ** 2)
+        
+        loss_dict = {
+            'coarse': jnp.mean((color_coarse - pixels) ** 2),
+            'fine': jnp.mean((color_fine - pixels) ** 2)
+        }
+
+        return loss_dict['coarse'] + loss_dict['fine'], loss_dict
 
     @jax.jit
     def update(opt, nerf, points, directions, pixels, keys):
-        loss, grads = jax.value_and_grad(mse)(nerf, points, directions, pixels, keys)
-        opt, nerf = opt.step(nerf, grads)
-        return opt, nerf, loss
+        grads, loss_dict = jax.grad(loss, has_aux=True)(nerf, points, directions, pixels, keys)
+        nerf = opt.step(nerf, grads)
+        return opt, nerf, loss_dict
 
     scene = Scene(config.scene, config.image_scale)
     key = jp.RandomKey(0)
@@ -52,14 +59,14 @@ if __name__ == '__main__':
     else:
         nerf = NeRF.create(key // 1, **config.nerf, **config.nerf.mlp)
 
-        if config.optimization.use_scheduler:
-            scheduler = jp.ExponentialAnnealing.create(n_iterations, config.optimization.lr, config.optimization.lr_end)
+        if config.opt.use_scheduler:
+            scheduler = jp.ExponentialAnnealing.create(config.opt.n_iterations, config.opt.lr, config.opt.lr_end)
         else:
             scheduler = None
 
-        opt = jp.Adam.create(nerf, config.optimization.lr, scheduler=scheduler)
+        opt = jp.Adam.create(nerf, config.opt.lr, scheduler=scheduler)
 
-    pbar = tqdm(scene.random_rays(n_iterations - opt.t, config.optimization.n_rays), initial=opt.t)
+    pbar = tqdm(scene.random_rays(config.opt.n_iterations - opt.t, config.opt.n_rays), initial=opt.t)
 
     def log(iteration):
         cam = scene.get_camera(config.train_view_to_log)
@@ -70,13 +77,13 @@ if __name__ == '__main__':
 
         save((opt, nerf), checkpoints_folder / f'{iteration:06d}.ckpt')
 
-    for i, (x, d, p) in zip(range(opt.t, n_iterations), pbar):
+    for i, (x, d, p) in zip(range(opt.t, config.opt.n_iterations), pbar):
 
         if i % config.log_every == 0 or i == 0:
             log(i)
 
-        opt, nerf, loss = update(opt, nerf, x, d, p, key // config.optimization.n_rays)
+        opt, nerf, loss_dict = update(opt, nerf, x, d, p, key // config.opt.n_rays)
 
-        pbar.set_description(f"Loss: {loss.item():.6f}")
+        pbar.set_description(f"Coarse: {loss_dict['coarse'].item():.6f}, Fine: {loss_dict['fine']:.6f}")
 
-    log(n_iterations)
+    log(config.opt.n_iterations)

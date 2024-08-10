@@ -1,15 +1,15 @@
 scene: data/nissan
 experiment_name: nissan
 logs_folder: logs
-log_every: 10000
+log_every: 1_000
 image_scale: 1.0
 render_batch_size: 8192
 train_view_to_log: 14
-starting_checkpoint: logs/nissan/checkpoints/050000.ckpt
+starting_checkpoint: 
 
-optimization:
+opt:
   lr: 5.0e-4
-  n_iterations: 300000
+  n_iterations: 10_000
   n_rays: 4096
   use_scheduler: true
   lr_end: 5.0e-5
