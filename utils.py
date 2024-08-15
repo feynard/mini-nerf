@@ -4,9 +4,11 @@ from functools import partial
 import jax
 import jax.numpy as jnp
 from jax_primitives import Dynamic, pytree
+from dataclasses import dataclass
 
 
 @pytree
+@dataclass
 class Camera:
 
     origin: Dynamic[jax.Array]
@@ -17,6 +19,7 @@ class Camera:
     res_y: int
 
 
+@partial(jax.jit, static_argnames=('return_coarse', 'batch_size'))
 def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
 
     '''
@@ -40,21 +43,18 @@ def render(nerf, camera, return_coarse: bool = False, batch_size: int = 1024):
     directions = points - camera.origin
     directions = directions / jnp.linalg.norm(directions, axis=-1, keepdims=True)
 
-    batch_render = jax.jit(partial(nerf.__call__, train=False, return_coarse=return_coarse))
-
-    color_batches = [
-        batch_render(points[i: i + batch_size], directions[i: i + batch_size])
-        for i in range(0, camera.res_x * camera.res_y, batch_size)
-    ]
+    color_batches = jax.lax.map(
+        lambda data: nerf(data[0], data[1], train=False, return_coarse=return_coarse),
+        (points, directions),
+        batch_size=batch_size
+    )
 
     image_shape = camera.res_y, camera.res_x, 3
 
     if return_coarse:
-        color_coarse, color_fine = [
-            jnp.concatenate([c[i] for c in color_batches]).clip(0, 1).reshape(*image_shape)
-            for i in range(2)
-        ]
-
+        color_coarse, color_fine = color_batches
+        color_coarse = color_coarse.clip(0, 1).reshape(*image_shape)
+        color_fine = color_fine.clip(0, 1).reshape(*image_shape)
         return [jnp.array(c * 255).astype(dtype=jnp.uint8) for c in [color_coarse, color_fine]]
     else:
         color_fine = jnp.concatenate(color_batches).clip(0, 1).reshape(*image_shape)

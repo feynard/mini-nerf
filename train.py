@@ -36,7 +36,9 @@ if __name__ == '__main__':
     shutil.copyfile(sys.argv[1], logs_folder / 'config.yaml')
 
     def loss(nerf, points, directions, pixels, keys):
-        color_coarse, color_fine = nerf(points, directions, keys)
+        
+        color_coarse, color_fine = \
+            jp.vmap(nerf.__call__, in_axes=(0, 0, 0, None, None))(points, directions, keys)
         
         loss_dict = {
             'coarse': jnp.mean((color_coarse - pixels) ** 2),
@@ -57,14 +59,14 @@ if __name__ == '__main__':
     if config.starting_checkpoint is not None:
         opt, nerf = load(config.starting_checkpoint)
     else:
-        nerf = NeRF.create(key // 1, **config.nerf, **config.nerf.mlp)
+        nerf = NeRF(key // 1, **config.nerf, **config.nerf.mlp)
 
         if config.opt.use_scheduler:
-            scheduler = jp.ExponentialAnnealing.create(config.opt.n_iterations, config.opt.lr, config.opt.lr_end)
+            scheduler = jp.ExponentialAnnealing(config.opt.n_iterations, config.opt.lr, config.opt.lr_end)
         else:
             scheduler = None
 
-        opt = jp.Adam.create(nerf, config.opt.lr, scheduler=scheduler)
+        opt = jp.Adam(nerf, config.opt.lr, scheduler=scheduler)
 
     pbar = tqdm(scene.random_rays(config.opt.n_iterations - opt.t, config.opt.n_rays), initial=opt.t)
 

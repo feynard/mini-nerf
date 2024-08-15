@@ -1,4 +1,3 @@
-from functools import partial
 from typing import Dict, List, Optional, Self, Tuple
 
 import jax
@@ -15,10 +14,8 @@ class MLP:
     color_layers: Dynamic[Dict[str, jp.Linear | jax.Array]]
     conditioned_layers: Tuple[int, ...]
 
-
-    @classmethod
-    def create(
-        cls,
+    def __init__(
+        self,
         key: jax.Array,
         x_dim: int,
         d_dim: int,
@@ -31,26 +28,26 @@ class MLP:
 
         keys = jax.random.split(key, n_layers + 1)
 
-        main_layers = [jp.Linear.create(x_dim, inner_dim, keys[0])]
+        self.main_layers = [jp.Linear(x_dim, inner_dim, keys[0])]
 
         for i in range(1, n_layers + 1):
             if i in conditioned_layers:
-                main_layers.append(jp.Linear.create(inner_dim + x_dim, inner_dim, keys[i]))
+                self.main_layers.append(jp.Linear(inner_dim + x_dim, inner_dim, keys[i]))
             else:
-                main_layers.append(jp.Linear.create(inner_dim, inner_dim, keys[i]))
+                self.main_layers.append(jp.Linear(inner_dim, inner_dim, keys[i]))
 
-        sigma_layer = jp.Linear.create(inner_dim, 1, keys[n_layers])
+        self.sigma_layer = jp.Linear(inner_dim, 1, keys[n_layers])
 
         keys = jax.random.split(key, 3)
 
-        color_layers = {
-            'backbone': jp.Linear.create(inner_dim, inner_dim // 2, keys[0], bias=False),
-            'direction': jp.Linear.create(d_dim, inner_dim // 2, keys[1], bias=False),
+        self.color_layers = {
+            'backbone': jp.Linear(inner_dim, inner_dim // 2, keys[0], bias=False),
+            'direction': jp.Linear(d_dim, inner_dim // 2, keys[1], bias=False),
             'bias': jnp.zeros(inner_dim // 2),
-            'final': jp.Linear.create(inner_dim // 2, 3, keys[2])
+            'final': jp.Linear(inner_dim // 2, 3, keys[2])
         }
 
-        return cls(main_layers, sigma_layer, color_layers, conditioned_layers)
+        self.conditioned_layers = conditioned_layers
 
 
     def __call__(
@@ -114,9 +111,8 @@ class NeRF:
     d_pos_dim: int
 
 
-    @classmethod
-    def create(
-        cls,
+    def __init__(
+        self,
         key: jax.Array,
         x_pos_dim: int = 10,
         d_pos_dim: int = 4,
@@ -132,11 +128,14 @@ class NeRF:
         
         key_coarse, key_fine = jax.random.split(key, 2)
 
-        net_coarse = MLP.create(key_coarse, x_pos_dim * 6, d_pos_dim * 6, inner_dim, n_layers, conditioned_layers)
-        net_fine = MLP.create(key_fine, x_pos_dim * 6, d_pos_dim * 6, inner_dim, n_layers, conditioned_layers)
-        
-        return cls(net_coarse, net_fine, sampling_depth, n_coarse_samples, n_fine_samples, x_pos_dim, d_pos_dim)
+        self.net_coarse = MLP(key_coarse, x_pos_dim * 6, d_pos_dim * 6, inner_dim, n_layers, conditioned_layers)
+        self.net_fine = MLP(key_fine, x_pos_dim * 6, d_pos_dim * 6, inner_dim, n_layers, conditioned_layers)
 
+        self.sampling_depth = sampling_depth
+        self.n_coarse_samples = n_coarse_samples
+        self.n_fine_samples = n_fine_samples
+        self.x_pos_dim = x_pos_dim
+        self.d_pos_dim = d_pos_dim
 
     def ray_march(self, color, sigma, samples):
 
@@ -148,20 +147,7 @@ class NeRF:
 
         return jnp.sum(color * jnp.expand_dims(w, -1), 0), w / (w.sum() + 1e-7)
 
-
     def __call__(
-        self,
-        points: jax.Array,
-        directions: jax.Array,
-        keys: Optional[jax.Array] = None,
-        train: bool = True,
-        return_coarse: bool = False
-    ) -> jax.Array | Tuple[jax.Array, jax.Array]:
-
-        return self.render(points, directions, keys, train, return_coarse)
-
-    @partial(jax.vmap, in_axes=(None, 0, 0, 0, None, None))
-    def render(
         self,
         point: jax.Array,
         direction: jax.Array,
